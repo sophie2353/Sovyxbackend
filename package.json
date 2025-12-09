@@ -1,0 +1,15 @@
+{
+  "name": "Sovyxbackend",
+  "version": "1.0.0",
+  "description": "Backend IA de SOVYX con Node.js y Express",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
