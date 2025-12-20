@@ -40,17 +40,30 @@ app.post('/api/audience/build', (req, res) => {
   const audiencia = {
     audience_id: 'aud_' + Date.now(),
     size: constraints.size || 100000,
-    geo: constraints.geo || ['LATAM'], ['SPAIN'] 
-    topics: constraints.topics || ['negocios', 'servicios_high_ticket'],
+
+    // Segmentación avanzada
+    geo: constraints.geo || ['LATAM'], // Ej: ["LATAM", "EUROPA"]
+    age_range: constraints.age_range || { min: 25, max: 45 }, // Ej: { min: 25, max: 45 }
+    business_type: constraints.business_type || [
+      'emprendedores',
+      'creadores_contenido',
+      'fitness_influencers',
+      'agencias'
+    ],
+    revenue_stage: constraints.revenue_stage || '5k-10k mensual', // Nivel de facturación
+    experience_level: constraints.experience_level || 'intermedio', // Ej: "intermedio", "avanzado"
+
+    // Ticket y calidad
     ticket_min: constraints.ticket_min || 1000,
     ticket_max: constraints.ticket_max || 10000,
     quality_score: 0.9,
+
+    // Plataforma
     platform: 'instagram'
   };
 
   res.json(audiencia);
-});
-
+     }): 
 /* -------------------------------------------------------
    2. ENDPOINT: Asignar entrega (plan de distribución)
 ------------------------------------------------------- */
