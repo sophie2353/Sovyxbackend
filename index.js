@@ -42,7 +42,7 @@ app.post('/api/audience/build', (req, res) => {
     size: constraints.size || 100000,
 
     // Segmentación avanzada
-    geo: constraints.geo || ['LATAM'], // Ej: ["LATAM", "EUROPA"]
+    geo: constraints.geo || ["LATAM", "EUROPA"]
     age_range: constraints.age_range || { min: 25, max: 45 }, // Ej: { min: 25, max: 45 }
     business_type: constraints.business_type || [
       'emprendedores',
