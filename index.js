@@ -64,18 +64,40 @@ app.post('/api/audience/build', (req, res) => {
 
   res.json(audiencia);
      }): 
+
 /* -------------------------------------------------------
-   2. ENDPOINT: Asignar entrega (plan de distribución)
+   2. ENDPOINT: Asignar entrega (con segmentación avanzada)
 ------------------------------------------------------- */
 
 app.post('/api/delivery/assign', (req, res) => {
-  const { session_id, audience_id, post, window_hours, closure_target } = req.body;
+  const { 
+    session_id, 
+    audience_id, 
+    post, 
+    window_hours, 
+    closure_target, 
+    constraints = {} 
+  } = req.body;
 
   const entrega = {
     delivery_id: 'deliv_' + Date.now(),
     status: 'scheduled',
     audience_id,
     post,
+
+    // Segmentación avanzada heredada de audience.build
+    geo: constraints.geo || ['LATAM'],
+    age_range: constraints.age_range || { min: 25, max: 45 },
+    business_type: constraints.business_type || [
+      'emprendedores',
+      'creadores_contenido',
+      'fitness_influencers',
+      'agencias'
+    ],
+    revenue_stage: constraints.revenue_stage || '5k-10k mensual',
+    experience_level: constraints.experience_level || 'intermedio',
+
+    // Configuración de entrega
     window_hours: window_hours || 24,
     target: {
       reach_24h: 100000,
@@ -86,7 +108,6 @@ app.post('/api/delivery/assign', (req, res) => {
 
   res.json(entrega);
 });
-
 /* -------------------------------------------------------
    3. ENDPOINT: Configurar Lenguaje SOVYXIA High Ticket
 ------------------------------------------------------- */
