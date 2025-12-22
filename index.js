@@ -63,10 +63,9 @@ app.post('/api/audience/build', (req, res) => {
   };
 
   res.json(audiencia);
-     }): 
-
+     }):
 /* -------------------------------------------------------
-   2. ENDPOINT: Asignar entrega (con segmentación avanzada)
+   2. ENDPOINT: Asignar entrega (100k cada 24h, acumulativo)
 ------------------------------------------------------- */
 
 app.post('/api/delivery/assign', (req, res) => {
@@ -78,6 +77,9 @@ app.post('/api/delivery/assign', (req, res) => {
     closure_target, 
     constraints = {} 
   } = req.body;
+
+  // Alcance dinámico: 100k cada 24h
+  const reach_total = Math.floor((window_hours || 24) / 24) * 100000;
 
   const entrega = {
     delivery_id: 'deliv_' + Date.now(),
@@ -100,7 +102,7 @@ app.post('/api/delivery/assign', (req, res) => {
     // Configuración de entrega
     window_hours: window_hours || 24,
     target: {
-      reach_24h: 100000,
+      reach_total, // 100k cada 24h acumulado
       closure_rate: closure_target || { min: 0.01, max: 0.10 }
     },
     eta: new Date(Date.now() + (window_hours || 24) * 3600 * 1000).toISOString()
