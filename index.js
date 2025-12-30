@@ -2,7 +2,6 @@ const express = require('express');
 const app = express();
 
 // Si tu entorno no es Node 18+, necesitas importar node-fetch
-// Descomenta la siguiente línea si te da error "fetch is not defined"
 // const fetch = require('node-fetch');
 
 app.use(express.json());
@@ -11,11 +10,9 @@ app.use(express.json());
    0. CONFIGURACIÓN INSTAGRAM (API OFICIAL)
 ------------------------------------------------------- */
 
-// Asegúrate de poner estas variables en Railway
 const INSTAGRAM_ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN;
 const INSTAGRAM_IG_USER_ID = process.env.INSTAGRAM_IG_USER_ID;
 
-// Helper para llamar al Graph API de Meta/Instagram
 async function callInstagramGraph(endpoint, method = 'GET', body = null) {
   const url = new URL(`https://graph.facebook.com/v24.0/${endpoint}`);
   url.searchParams.set('access_token', INSTAGRAM_ACCESS_TOKEN);
@@ -47,7 +44,7 @@ app.post('/api/audience/build', (req, res) => {
 
     // Segmentación avanzada
     geo: constraints.geo || ["LATAM", "EUROPA"],
-    age_range: constraints.age_range || { min: 25, max: 45 }, 
+    age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
       'emprendedores',
       'creadores_contenido',
@@ -83,7 +80,6 @@ app.post('/api/delivery/assign', (req, res) => {
     constraints = {} 
   } = req.body;
 
-  // Alcance dinámico: 100k cada 24h
   const reach_total = Math.floor((window_hours || 24) / 24) * 100000;
 
   const entrega = {
@@ -91,8 +87,6 @@ app.post('/api/delivery/assign', (req, res) => {
     status: 'scheduled',
     audience_id,
     post,
-
-    // Segmentación avanzada heredada de audience.build
     geo: constraints.geo || ['LATAM'],
     age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
@@ -103,11 +97,9 @@ app.post('/api/delivery/assign', (req, res) => {
     ],
     revenue_stage: constraints.revenue_stage || '5k-10k mensual',
     experience_level: constraints.experience_level || 'intermedio',
-
-    // Configuración de entrega
     window_hours: window_hours || 24,
     target: {
-      reach_total, // 100k cada 24h acumulado
+      reach_total,
       closure_rate: closure_target || { min: 0.01, max: 0.10 }
     },
     eta: new Date(Date.now() + (window_hours || 24) * 3600 * 1000).toISOString()
@@ -174,7 +166,7 @@ app.post('/api/language/configure', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   4. ENDPOINT: Analizar contenido (texto + cierre)
+   4. ENDPOINT: Analizar contenido
 ------------------------------------------------------- */
 
 app.post('/api/content/analyze', (req, res) => {
@@ -209,7 +201,7 @@ app.post('/api/content/analyze', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   5. ENDPOINT: Recalibrar contenido (versión optimizada)
+   5. ENDPOINT: Recalibrar contenido
 ------------------------------------------------------- */
 
 app.post('/api/content/recalibrate', (req, res) => {
@@ -238,7 +230,7 @@ app.post('/api/content/recalibrate', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   6. ENDPOINT: Publicar en Instagram vía API oficial
+   6. ENDPOINT: Publicar en Instagram
 ------------------------------------------------------- */
 
 app.post('/api/instagram/publish', async (req, res) => {
@@ -251,14 +243,10 @@ app.post('/api/instagram/publish', async (req, res) => {
       });
     }
 
-    // 1. Crear el contenedor de media
     const creation = await callInstagramGraph(
       `${INSTAGRAM_IG_USER_ID}/media`,
       'POST',
-      {
-        caption
-        // Más adelante puedes añadir image_url aquí
-      }
+      { caption }
     );
 
     if (!creation.id) {
@@ -268,18 +256,13 @@ app.post('/api/instagram/publish', async (req, res) => {
       });
     }
 
-    // 2. Publicar el media creado
     const publish = await callInstagramGraph(
       `${INSTAGRAM_IG_USER_ID}/media_publish`,
       'POST',
       { creation_id: creation.id }
     );
 
-    return res.json({
-      status: 'published',
-      creation,
-      publish
-    });
+    return res.json({ status: 'published', creation, publish });
   } catch (err) {
     console.error('Error publicando en Instagram:', err);
     return res.status(500).json({ error: 'Error interno al publicar en Instagram' });
@@ -287,21 +270,21 @@ app.post('/api/instagram/publish', async (req, res) => {
 });
 
 /* -------------------------------------------------------
-   7. ENDPOINT:Obtener insights reales de IG (alcance real)
+   7. ENDPOINT: Obtener insights reales de IG
 ------------------------------------------------------- */
 
 app.get('/api/instagram/insights/:mediaId', async (req, res) => {
   try {
     const { mediaId } = req.params;
 
-    if (!INSTAGRAMACCESSTOKEN) {
+    if (!INSTAGRAM_ACCESS_TOKEN) {
       return res.status(400).json({
-        error: 'Falta INSTAGRAMACCESSTOKEN en variables de entorno'
+        error: 'Falta INSTAGRAM_ACCESS_TOKEN en variables de entorno'
       });
     }
 
     const metrics = await callInstagramGraph(
-      ${mediaId}/insights?metric=impressions,reach,saved,engagement
+      `${mediaId}/insights?metric=impressions,reach,saved,engagement`
     );
 
     return res.json({
@@ -313,7 +296,6 @@ app.get('/api/instagram/insights/:mediaId', async (req, res) => {
     return res.status(500).json({ error: 'Error interno al obtener insights de Instagram' });
   }
 });
-
 /* -------------------------------------------------------
    8. ENDPOINT: Health Check
 ------------------------------------------------------- */
@@ -328,5 +310,3 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(SOVYX backend activo en puerto ${PORT});
-});
