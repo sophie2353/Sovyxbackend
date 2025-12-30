@@ -1,6 +1,10 @@
 const express = require('express');
 const app = express();
 
+// Si tu entorno no es Node 18+, necesitas importar node-fetch
+// Descomenta la siguiente línea si te da error "fetch is not defined"
+// const fetch = require('node-fetch');
+
 app.use(express.json());
 
 /* -------------------------------------------------------
@@ -42,16 +46,16 @@ app.post('/api/audience/build', (req, res) => {
     size: constraints.size || 100000,
 
     // Segmentación avanzada
-    geo: constraints.geo || ["LATAM", "EUROPA"]
-    age_range: constraints.age_range || { min: 25, max: 45 }, // Ej: { min: 25, max: 45 }
+    geo: constraints.geo || ["LATAM", "EUROPA"],
+    age_range: constraints.age_range || { min: 25, max: 45 }, 
     business_type: constraints.business_type || [
       'emprendedores',
       'creadores_contenido',
       'fitness_influencers',
       'agencias'
     ],
-    revenue_stage: constraints.revenue_stage || '5k-10k mensual', // Nivel de facturación
-    experience_level: constraints.experience_level || 'intermedio', // Ej: "intermedio", "avanzado"
+    revenue_stage: constraints.revenue_stage || '5k-10k mensual',
+    experience_level: constraints.experience_level || 'intermedio',
 
     // Ticket y calidad
     ticket_min: constraints.ticket_min || 1000,
@@ -63,7 +67,8 @@ app.post('/api/audience/build', (req, res) => {
   };
 
   res.json(audiencia);
-     }):
+});
+
 /* -------------------------------------------------------
    2. ENDPOINT: Asignar entrega (100k cada 24h, acumulativo)
 ------------------------------------------------------- */
@@ -110,6 +115,7 @@ app.post('/api/delivery/assign', (req, res) => {
 
   res.json(entrega);
 });
+
 /* -------------------------------------------------------
    3. ENDPOINT: Configurar Lenguaje SOVYXIA High Ticket
 ------------------------------------------------------- */
@@ -169,7 +175,6 @@ app.post('/api/language/configure', (req, res) => {
 
 /* -------------------------------------------------------
    4. ENDPOINT: Analizar contenido (texto + cierre)
-   (por ahora respuesta fija, luego lo afinas con IA)
 ------------------------------------------------------- */
 
 app.post('/api/content/analyze', (req, res) => {
@@ -205,7 +210,6 @@ app.post('/api/content/analyze', (req, res) => {
 
 /* -------------------------------------------------------
    5. ENDPOINT: Recalibrar contenido (versión optimizada)
-   (también empieza fijo y luego lo podrás hacer dinámico)
 ------------------------------------------------------- */
 
 app.post('/api/content/recalibrate', (req, res) => {
@@ -283,21 +287,21 @@ app.post('/api/instagram/publish', async (req, res) => {
 });
 
 /* -------------------------------------------------------
-   7. ENDPOINT: Obtener insights reales de IG (alcance real)
+   7. ENDPOINT:Obtener insights reales de IG (alcance real)
 ------------------------------------------------------- */
 
 app.get('/api/instagram/insights/:mediaId', async (req, res) => {
   try {
     const { mediaId } = req.params;
 
-    if (!INSTAGRAM_ACCESS_TOKEN) {
+    if (!INSTAGRAMACCESSTOKEN) {
       return res.status(400).json({
-        error: 'Falta INSTAGRAM_ACCESS_TOKEN en variables de entorno'
+        error: 'Falta INSTAGRAMACCESSTOKEN en variables de entorno'
       });
     }
 
     const metrics = await callInstagramGraph(
-      `${mediaId}/insights?metric=impressions,reach,saved,engagement`
+      ${mediaId}/insights?metric=impressions,reach,saved,engagement
     );
 
     return res.json({
@@ -324,5 +328,5 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`SOVYX backend activo en puerto ${PORT}`);
+  console.log(SOVYX backend activo en puerto ${PORT});
 });
