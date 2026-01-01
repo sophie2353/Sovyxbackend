@@ -216,15 +216,15 @@ app.post('/api/instagram/publish', async (req, res) => {
   try {
     const { caption } = req.body;
 
-    if (!INSTAGRAMACCESSTOKEN || !INSTAGRAMIGUSER_ID) {
+    if (!INSTAGRAM_ACCESS_TOKEN || !INSTAGRAM_IG_USER_ID) {
       return res.status(400).json({
-        error: 'Faltan INSTAGRAMACCESSTOKEN o INSTAGRAMIGUSER_ID en variables de entorno'
+        error: 'Faltan INSTAGRAM_ACCESS_TOKEN o INSTAGRAM_IG_USER_ID en variables de entorno'
       });
     }
 
     // 1. Crear el contenedor de media
     const creation = await callInstagramGraph(
-      ${INSTAGRAMIGUSER_ID}/media,
+      `${INSTAGRAM_IG_USER_ID}/media`,
       'POST',
       { caption }
     );
@@ -238,7 +238,7 @@ app.post('/api/instagram/publish', async (req, res) => {
 
     // 2. Publicar el media creado
     const publish = await callInstagramGraph(
-      ${INSTAGRAMIGUSERID}/mediapublish,
+      `${INSTAGRAM_IG_USER_ID}/media_publish`,
       'POST',
       { creation_id: creation.id }
     );
