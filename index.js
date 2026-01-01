@@ -1,8 +1,8 @@
 const express = require('express');
 const app = express();
 
-// Si tu entorno no es Node 18+, descomenta la siguiente línea:
-// const fetch = require('node-fetch');
+// Compatibilidad con Node <18 (Railway suele usar 16)
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 app.use(express.json());
 
@@ -33,34 +33,24 @@ async function callInstagramGraph(endpoint, method = 'GET', body = null) {
 }
 
 /* -------------------------------------------------------
-   1. ENDPOINT: Construir audiencia (100K high ticket)
+   1. ENDPOINT: Construir audiencia
 ------------------------------------------------------- */
-
 app.post('/api/audience/build', (req, res) => {
   const { session_id, constraints = {} } = req.body;
 
   const audiencia = {
     audience_id: 'aud_' + Date.now(),
     size: constraints.size || 100000,
-
-    // Segmentación avanzada
     geo: constraints.geo || ["LATAM", "EUROPA"],
     age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
-      'emprendedores',
-      'creadores_contenido',
-      'fitness_influencers',
-      'agencias'
+      'emprendedores','creadores_contenido','fitness_influencers','agencias'
     ],
     revenue_stage: constraints.revenue_stage || '5k-10k mensual',
     experience_level: constraints.experience_level || 'intermedio',
-
-    // Ticket y calidad
     ticket_min: constraints.ticket_min || 1000,
     ticket_max: constraints.ticket_max || 10000,
     quality_score: 0.9,
-
-    // Plataforma
     platform: 'instagram'
   };
 
@@ -68,20 +58,10 @@ app.post('/api/audience/build', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   2. ENDPOINT: Asignar entrega (100k cada 24h, acumulativo)
+   2. ENDPOINT: Asignar entrega
 ------------------------------------------------------- */
-
 app.post('/api/delivery/assign', (req, res) => {
-  const { 
-    session_id, 
-    audience_id, 
-    post, 
-    window_hours, 
-    closure_target, 
-    constraints = {} 
-  } = req.body;
-
-  // Alcance dinámico: 100k cada 24h
+  const { session_id, audience_id, post, window_hours, closure_target, constraints = {} } = req.body;
   const reach_total = Math.floor((window_hours || 24) / 24) * 100000;
 
   const entrega = {
@@ -89,23 +69,16 @@ app.post('/api/delivery/assign', (req, res) => {
     status: 'scheduled',
     audience_id,
     post,
-
-    // Segmentación avanzada heredada
     geo: constraints.geo || ['LATAM'],
     age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
-      'emprendedores',
-      'creadores_contenido',
-      'fitness_influencers',
-      'agencias'
+      'emprendedores','creadores_contenido','fitness_influencers','agencias'
     ],
     revenue_stage: constraints.revenue_stage || '5k-10k mensual',
     experience_level: constraints.experience_level || 'intermedio',
-
-    // Configuración de entrega
     window_hours: window_hours || 24,
     target: {
-      reach_total, // 100k cada 24h acumulado
+      reach_total,
       closure_rate: closure_target || { min: 0.01, max: 0.10 }
     },
     eta: new Date(Date.now() + (window_hours || 24) * 3600 * 1000).toISOString()
@@ -131,10 +104,10 @@ app.post('/api/language/configure', (req, res) => {
   } = req.body;
 
   const languageProfile = {
-    language_profile_id: 'lang_' + Date.now(),
+    languageprofileid: 'lang_' + Date.now(),
     tone: {
       authority: "alta",
-      energy: style_preference === "agresivo" ? "alta" : "media_alta",
+      energy: stylepreference === "agresivo" ? "alta" : "mediaalta",
       directness: "alta",
       warmth: "media_baja"
     },
@@ -157,11 +130,11 @@ app.post('/api/language/configure', (req, res) => {
         "direct_offer",
         "authority_thread"
       ],
-      recommended_frequency_per_week: 5
+      recommendedfrequencyper_week: 5
     },
     closing_style: {
       filter_based: true,
-      call_to_action:
+      calltoaction:
         "si ya estás facturando y quieres estabilizar tickets altos, escribe 'ESTRUCTURA'",
       disqualification_angle:
         "si todavía estás probando ideas, este sistema no es para ti"
@@ -176,16 +149,16 @@ app.post('/api/language/configure', (req, res) => {
 ------------------------------------------------------- */
 
 app.post('/api/content/analyze', (req, res) => {
-  const { session_id, language_profile_id, posts = [] } = req.body;
+  const { sessionid, languageprofile_id, posts = [] } = req.body;
 
   const analysis = {
-    analysis_id: 'analysis_' + Date.now(),
+    analysisid: 'analysis' + Date.now(),
     summary: {
       clarity_score: 0.78,
       authority_score: 0.72,
       closing_strength: 0.55,
       target_alignment: 0.81,
-      high_ticket_signal: 0.67
+      highticketsignal: 0.67
     },
     issues: [
       {
@@ -211,7 +184,7 @@ app.post('/api/content/analyze', (req, res) => {
 ------------------------------------------------------- */
 
 app.post('/api/content/recalibrate', (req, res) => {
-  const { session_id, language_profile_id, post, objective } = req.body;
+  const { sessionid, languageprofile_id, post, objective } = req.body;
 
   const optimized = {
     original_excerpt: post?.content || "",
@@ -243,15 +216,15 @@ app.post('/api/instagram/publish', async (req, res) => {
   try {
     const { caption } = req.body;
 
-    if (!INSTAGRAM_ACCESS_TOKEN || !INSTAGRAM_IG_USER_ID) {
+    if (!INSTAGRAMACCESSTOKEN || !INSTAGRAMIGUSER_ID) {
       return res.status(400).json({
-        error: 'Faltan INSTAGRAM_ACCESS_TOKEN o INSTAGRAM_IG_USER_ID en variables de entorno'
+        error: 'Faltan INSTAGRAMACCESSTOKEN o INSTAGRAMIGUSER_ID en variables de entorno'
       });
     }
 
     // 1. Crear el contenedor de media
     const creation = await callInstagramGraph(
-      `${INSTAGRAM_IG_USER_ID}/media`,
+      ${INSTAGRAMIGUSER_ID}/media,
       'POST',
       { caption }
     );
@@ -265,7 +238,7 @@ app.post('/api/instagram/publish', async (req, res) => {
 
     // 2. Publicar el media creado
     const publish = await callInstagramGraph(
-      `${INSTAGRAM_IG_USER_ID}/media_publish`,
+      ${INSTAGRAMIGUSERID}/mediapublish,
       'POST',
       { creation_id: creation.id }
     );
@@ -289,14 +262,14 @@ app.get('/api/instagram/insights/:mediaId', async (req, res) => {
   try {
     const { mediaId } = req.params;
 
-    if (!INSTAGRAM_ACCESS_TOKEN) {
+    if (!INSTAGRAMACCESSTOKEN) {
       return res.status(400).json({
-        error: 'Falta INSTAGRAM_ACCESS_TOKEN en variables de entorno'
+        error: 'Falta INSTAGRAMACCESSTOKEN en variables de entorno'
       });
     }
 
     const metrics = await callInstagramGraph(
-      `${mediaId}/insights?metric=impressions,reach,saved,engagement`
+      ${mediaId}/insights?metric=impressions,reach,saved,engagement
     );
 
     return res.json({
@@ -320,7 +293,6 @@ app.get('/health', (req, res) => {
 /* -------------------------------------------------------
    9. SERVIDOR
 ------------------------------------------------------- */
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`SOVYX backend activo en puerto ${PORT}`);
