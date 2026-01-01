@@ -262,14 +262,15 @@ app.get('/api/instagram/insights/:mediaId', async (req, res) => {
   try {
     const { mediaId } = req.params;
 
-    if (!INSTAGRAMACCESSTOKEN) {
+    if (!INSTAGRAM_ACCESS_TOKEN) {
       return res.status(400).json({
-        error: 'Falta INSTAGRAMACCESSTOKEN en variables de entorno'
+        error: 'Falta INSTAGRAM_ACCESS_TOKEN en variables de entorno'
       });
     }
 
     const metrics = await callInstagramGraph(
-      ${mediaId}/insights?metric=impressions,reach,saved,engagement
+      `${mediaId}/insights?metric=impressions,reach,saved,engagement`,
+      'GET'
     );
 
     return res.json({
