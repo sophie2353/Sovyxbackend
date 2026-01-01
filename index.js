@@ -292,7 +292,14 @@ app.get('/health', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   9. SERVIDOR
+   9. ENDPOINT raíz (respuesta al abrir el link)
+------------------------------------------------------- */
+app.get('/', (req, res) => {
+  res.send('✨ SOVYX backend activo y listo para recibir llamadas 🚀');
+});
+
+/* -------------------------------------------------------
+   10. SERVIDOR
 ------------------------------------------------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
