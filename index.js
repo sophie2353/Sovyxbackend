@@ -290,37 +290,21 @@ app.get('/api/instagram/insights/:mediaId', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
+
+let IG_ACCESS_TOKEN = null; // se llena en el callback
+
 app.get('/ig/callback', async (req, res) => {
-  const code = req.query.code;
-  if (!code) {
-    return res.status(400).send("Falta el code en la URL");
-  }
-
-  try {
-    const params = new URLSearchParams();
-    params.append("client_id", process.env.CLIENT_ID);
-    params.append("client_secret", process.env.CLIENT_SECRET);
-    params.append("grant_type", "authorization_code");
-    params.append("redirect_uri", process.env.REDIRECT_URI);
-    params.append("code", code);
-
-    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
-      method: "POST",
-      body: params
-    });
-    const tokenData = await tokenRes.json();
-
-    // Aquí guardas el token en DB o en memoria
-    res.json({
-      access_token: tokenData.access_token,
-      user_id: tokenData.user_id,
-      expires_in: tokenData.expires_in
-    });
-  } catch (err) {
-    console.error("Error en IG callback:", err);
-    res.status(500).send("Error al convertir code en token");
-  }
+  // ... convertir code en token
+  IG_ACCESS_TOKEN = tokenData.access_token;
+  IG_USER_ID = tokenData.user_id;
+  res.send("Token guardado en backend");
 });
+
+async function callInstagramGraph(endpoint, method = 'GET', body = null) {
+  const url = new URL(`https://graph.facebook.com/v24.0/${endpoint}`);
+  url.searchParams.set('access_token', IG_ACCESS_TOKEN);
+  // resto igual...
+}
 
 /* -------------------------------------------------------
    9. ENDPOINT raíz (respuesta al abrir el link)
