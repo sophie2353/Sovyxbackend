@@ -1,3 +1,7 @@
+/* -------------------------------------------------------
+   SOVYX Backend - IG OAuth + Segmentación + Delivery
+------------------------------------------------------- */
+require('dotenv').config();
 const express = require('express');
 const app = express();
 
@@ -7,25 +11,23 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 app.use(express.json());
 
 /* -------------------------------------------------------
-   0. CONFIGURACIÓN INSTAGRAM (API OFICIAL)
+   0. CONFIG GLOBAL: Token dinámico
 ------------------------------------------------------- */
+let IG_ACCESS_TOKEN = null;   // se llena en /ig/callback
+let IG_USER_ID = null;        // se llena en /ig/callback
 
-const INSTAGRAM_ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN;
-const INSTAGRAM_IG_USER_ID = process.env.INSTAGRAM_IG_USER_ID;
-
-// Helper para llamar al Graph API de Meta/Instagram
+/* -------------------------------------------------------
+   0.1 Helper Instagram Graph API
+------------------------------------------------------- */
 async function callInstagramGraph(endpoint, method = 'GET', body = null) {
-  const url = new URL(`https://graph.facebook.com/v24.0/${endpoint}`);
-  url.searchParams.set('access_token', INSTAGRAM_ACCESS_TOKEN);
-
-  const options = {
-    method,
-    headers: { 'Content-Type': 'application/json' }
-  };
-
-  if (body && method !== 'GET') {
-    options.body = JSON.stringify(body);
+  if (!IG_ACCESS_TOKEN) {
+    return { error: 'IG_ACCESS_TOKEN vacío. Autentica por /ig/callback primero.' };
   }
+  const url = new URL(`https://graph.facebook.com/v24.0/${endpoint}`);
+  url.searchParams.set('access_token', IG_ACCESS_TOKEN);
+
+  const options = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body && method !== 'GET') options.body = JSON.stringify(body);
 
   const response = await fetch(url.toString(), options);
   const data = await response.json();
@@ -33,7 +35,139 @@ async function callInstagramGraph(endpoint, method = 'GET', body = null) {
 }
 
 /* -------------------------------------------------------
-   1. ENDPOINT: Construir audiencia
+   1. IG OAuth: Callback → token corto → token largo (~60d)
+------------------------------------------------------- */
+app.get('/ig/callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.status(400).send("Falta el code en la URL");
+
+  try {
+    // 1) code → short-lived token
+    const params = new URLSearchParams();
+    params.append("client_id", process.env.CLIENT_ID);
+    params.append("client_secret", process.env.CLIENT_SECRET);
+    params.append("grant_type", "authorization_code");
+    params.append("redirect_uri", process.env.REDIRECT_URI);
+    params.append("code", code);
+
+    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
+      method: "POST",
+      body: params
+    });
+    const tokenData = await tokenRes.json();
+    if (tokenData.error_message) {
+      return res.status(400).json({ error: "OAuth error", raw: tokenData });
+    }
+
+    // 2) short → long-lived token (~60 días)
+    const longRes = await fetch(
+      `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.CLIENT_SECRET}&access_token=${tokenData.access_token}`
+    );
+    const longData = await longRes.json();
+    if (longData.error) {
+      return res.status(400).json({ error: "Exchange error", raw: longData });
+    }
+
+    IG_ACCESS_TOKEN = longData.access_token;
+    IG_USER_ID = tokenData.user_id; // IG user id entregado por el paso de OAuth
+
+    res.json({
+      status: "ok",
+      message: "Token largo generado y guardado en backend",
+      user_id: IG_USER_ID,
+      long_token_expires_in: longData.expires_in
+    });
+  } catch (err) {
+    console.error("Error en IG callback:", err);
+    res.status(500).send("Error al convertir code en token");
+  }
+});
+
+/* -------------------------------------------------------
+   1.1 IG: Refresh token largo (extiende expiración)
+------------------------------------------------------- */
+app.get('/ig/refresh', async (_req, res) => {
+  try {
+    if (!IG_ACCESS_TOKEN) return res.status(400).json({ error: "No hay token para refrescar" });
+    const refreshRes = await fetch(
+      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${IG_ACCESS_TOKEN}`
+    );
+    const refreshData = await refreshRes.json();
+    if (refreshData.access_token) IG_ACCESS_TOKEN = refreshData.access_token;
+    res.json(refreshData);
+  } catch (err) {
+    console.error("Error en IG refresh:", err);
+    res.status(500).json({ error: "Error refrescando token" });
+  }
+});
+
+/* -------------------------------------------------------
+   2. Publicar en Instagram (imagen + caption)
+   Requiere: IG_ACCESS_TOKEN dinámico y IG_USER_ID
+------------------------------------------------------- */
+app.post('/api/instagram/publish', async (req, res) => {
+  try {
+    const { caption, image_url } = req.body;
+    if (!IG_ACCESS_TOKEN || !IG_USER_ID) {
+      return res.status(400).json({ error: "Autentica primero por /ig/callback" });
+    }
+    if (!image_url) {
+      return res.status(400).json({ error: "Falta image_url pública para IG" });
+    }
+
+    // 1) Crear media contenedor (con image_url + caption)
+    const creation = await callInstagramGraph(
+      `${IG_USER_ID}/media`,
+      'POST',
+      { image_url, caption }
+    );
+    if (!creation.id) {
+      return res.status(400).json({ error: "No se pudo crear el contenedor", raw: creation });
+    }
+
+    // 2) Publicar el contenedor
+    const publish = await callInstagramGraph(
+      `${IG_USER_ID}/media_publish`,
+      'POST',
+      { creation_id: creation.id }
+    );
+    if (publish.error) {
+      return res.status(400).json({ error: "No se pudo publicar", raw: publish });
+    }
+
+    res.json({
+      status: 'published',
+      creation_id: creation.id,
+      publish
+    });
+  } catch (err) {
+    console.error('Error publicando en Instagram:', err);
+    res.status(500).json({ error: 'Error interno al publicar en Instagram' });
+  }
+});
+
+/* -------------------------------------------------------
+   3. Insights reales del media publicado
+------------------------------------------------------- */
+app.get('/api/instagram/insights/:mediaId', async (req, res) => {
+  try {
+    const { mediaId } = req.params;
+    if (!IG_ACCESS_TOKEN) {
+      return res.status(400).json({ error: 'Autentica primero por /ig/callback' });
+    }
+    const metrics = await callInstagramGraph(
+      `${mediaId}/insights?metric=impressions,reach,saved,engagement`,
+      'GET'
+    );
+    res.json({ media_id: mediaId, metrics });
+  } catch (err) {
+    console.error('Error obteniendo insights:', err);
+    res.status(500).json({ error: 'Error interno al obtener insights' });
+  }
+});
+
+/* -------------------------------------------------------
+   4. Construir audiencia (100k, LATAM+EUROPA, high ticket)
 ------------------------------------------------------- */
 app.post('/api/audience/build', (req, res) => {
   const { session_id, constraints = {} } = req.body;
@@ -42,6 +176,7 @@ app.post('/api/audience/build', (req, res) => {
     audience_id: 'aud_' + Date.now(),
     size: constraints.size || 100000,
     geo: constraints.geo || ["LATAM", "EUROPA"],
+    segment: constraints.segment || "high_ticket",
     age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
       'emprendedores','creadores_contenido','fitness_influencers','agencias'
@@ -51,49 +186,50 @@ app.post('/api/audience/build', (req, res) => {
     ticket_min: constraints.ticket_min || 1000,
     ticket_max: constraints.ticket_max || 10000,
     quality_score: 0.9,
-    platform: 'instagram'
+    platform: constraints.platform || 'instagram'
   };
 
   res.json(audiencia);
 });
 
 /* -------------------------------------------------------
-   2. ENDPOINT: Asignar entrega
+   5. Asignar delivery (24h + cierre estimado 30%)
 ------------------------------------------------------- */
 app.post('/api/delivery/assign', (req, res) => {
-  const { session_id, audience_id, post, window_hours, closure_target, constraints = {} } = req.body;
-  const reach_total = Math.floor((window_hours || 24) / 24) * 100000;
+  const { session_id, audience_id, post, window_hours, constraints = {} } = req.body;
+  const hours = window_hours || 24;
+  const reach_total = Math.floor(hours / 24) * 100000; // 100k cada 24h
+  const cierre_estimado = Math.floor(reach_total * 0.30); // 30%
 
   const entrega = {
     delivery_id: 'deliv_' + Date.now(),
     status: 'scheduled',
     audience_id,
     post,
-    geo: constraints.geo || ['LATAM'],
+    geo: constraints.geo || ['LATAM', 'EUROPA'],
     age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
       'emprendedores','creadores_contenido','fitness_influencers','agencias'
     ],
     revenue_stage: constraints.revenue_stage || '5k-10k mensual',
     experience_level: constraints.experience_level || 'intermedio',
-    window_hours: window_hours || 24,
+    window_hours: hours,
     target: {
       reach_total,
-      closure_rate: closure_target || { min: 0.01, max: 0.10 }
+      cierre_estimado,
+      closure_rate_assumed: 0.30
     },
-    eta: new Date(Date.now() + (window_hours || 24) * 3600 * 1000).toISOString()
+    eta: new Date(Date.now() + hours * 3600 * 1000).toISOString()
   };
 
   res.json(entrega);
 });
 
 /* -------------------------------------------------------
-   3. ENDPOINT: Configurar Lenguaje SOVYXIA High Ticket
+   6. Lenguaje SOVYXIA High Ticket (config)
 ------------------------------------------------------- */
-
 app.post('/api/language/configure', (req, res) => {
   const {
-    session_id,
     niche,
     ticket,
     platform,
@@ -107,7 +243,7 @@ app.post('/api/language/configure', (req, res) => {
     languageprofileid: 'lang_' + Date.now(),
     tone: {
       authority: "alta",
-      energy: stylepreference === "agresivo" ? "alta" : "mediaalta",
+      energy: style_preference === "agresivo" ? "alta" : "media_alta",
       directness: "alta",
       warmth: "media_baja"
     },
@@ -145,11 +281,10 @@ app.post('/api/language/configure', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   4. ENDPOINT: Analizar contenido (texto + cierre)
+   7. Analizar contenido (texto + cierre)
 ------------------------------------------------------- */
-
 app.post('/api/content/analyze', (req, res) => {
-  const { sessionid, languageprofile_id, posts = [] } = req.body;
+  const { posts = [] } = req.body;
 
   const analysis = {
     analysisid: 'analysis' + Date.now(),
@@ -161,14 +296,8 @@ app.post('/api/content/analyze', (req, res) => {
       highticketsignal: 0.67
     },
     issues: [
-      {
-        type: "closing",
-        description: "El cierre es demasiado abierto, no filtra ni genera inevitabilidad."
-      },
-      {
-        type: "authority",
-        description: "El tono suena a consejo general, no a sistema probado para gente que ya factura."
-      }
+      { type: "closing", description: "El cierre es demasiado abierto, no filtra ni genera inevitabilidad." },
+      { type: "authority", description: "El tono suena a consejo general, no a sistema probado para gente que ya factura." }
     ],
     recommendations: [
       "Refuerza el filtro: deja claro para quién es y para quién no.",
@@ -180,28 +309,18 @@ app.post('/api/content/analyze', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   5. ENDPOINT: Recalibrar contenido (versión optimizada)
+   8. Recalibrar contenido (versión optimizada)
 ------------------------------------------------------- */
-
 app.post('/api/content/recalibrate', (req, res) => {
-  const { sessionid, languageprofile_id, post, objective } = req.body;
+  const { post, objective } = req.body;
 
   const optimized = {
     original_excerpt: post?.content || "",
     optimized_version:
-      "Versión optimizada con lenguaje SOVYXIA High Ticket: hablas desde autoridad, filtras a quienes no califican y haces que el siguiente paso sea inevitable para quienes ya están facturando.",
+      "Versión SOVYXIA High Ticket: hablas desde autoridad, filtras a quienes no califican y haces que el siguiente paso sea inevitable para quienes ya están facturando.",
     changes_explained: [
-      {
-        type: "tone",
-        before: "Sonaba como un consejo genérico.",
-        after: "Ahora hablas como alguien que diseña sistemas para negocios que ya tienen producto y ventas."
-      },
-      {
-        type: "closing",
-        before: "CTA del tipo 'si te interesa, escríbeme'.",
-        after:
-          "CTA filtrado: 'Si ya estás en 5k-10k al mes y quieres estabilizar tickets altos, escribe ESTABLE y te explico cómo lo ajustamos a tu caso.'"
-      }
+      { type: "tone", before: "Sonaba como consejo genérico.", after: "Ahora hablas como arquitecta de sistemas para negocios con ventas." },
+      { type: "closing", before: "CTA blando.", after: "CTA filtrado: 'Si ya estás en 5k-10k/mes y quieres estabilizar tickets altos, escribe ESTRUCTURA'." }
     ]
   };
 
@@ -209,107 +328,13 @@ app.post('/api/content/recalibrate', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   6. ENDPOINT: Publicar en Instagram vía API oficial
+   9. Health y raíz
 ------------------------------------------------------- */
-
-app.post('/api/instagram/publish', async (req, res) => {
-  try {
-    const { caption } = req.body;
-
-    if (!INSTAGRAM_ACCESS_TOKEN || !INSTAGRAM_IG_USER_ID) {
-      return res.status(400).json({
-        error: 'Faltan INSTAGRAM_ACCESS_TOKEN o INSTAGRAM_IG_USER_ID en variables de entorno'
-      });
-    }
-
-    // 1. Crear el contenedor de media
-    const creation = await callInstagramGraph(
-      `${INSTAGRAM_IG_USER_ID}/media`,
-      'POST',
-      { caption }
-    );
-
-    if (!creation.id) {
-      return res.status(400).json({
-        error: 'No se pudo crear el contenedor de media en Instagram',
-        raw: creation
-      });
-    }
-
-    // 2. Publicar el media creado
-    const publish = await callInstagramGraph(
-      `${INSTAGRAM_IG_USER_ID}/media_publish`,
-      'POST',
-      { creation_id: creation.id }
-    );
-
-    return res.json({
-      status: 'published',
-      creation,
-      publish
-    });
-  } catch (err) {
-    console.error('Error publicando en Instagram:', err);
-    return res.status(500).json({ error: 'Error interno al publicar en Instagram' });
-  }
-});
-
-/* -------------------------------------------------------
-   7. ENDPOINT: Obtener insights reales de IG (alcance real)
-------------------------------------------------------- */
-
-app.get('/api/instagram/insights/:mediaId', async (req, res) => {
-  try {
-    const { mediaId } = req.params;
-
-    if (!INSTAGRAM_ACCESS_TOKEN) {
-      return res.status(400).json({
-        error: 'Falta INSTAGRAM_ACCESS_TOKEN en variables de entorno'
-      });
-    }
-
-    const metrics = await callInstagramGraph(
-      `${mediaId}/insights?metric=impressions,reach,saved,engagement`,
-      'GET'
-    );
-
-    return res.json({
-      media_id: mediaId,
-      metrics
-    });
-  } catch (err) {
-    console.error('Error obteniendo insights de Instagram:', err);
-    return res.status(500).json({ error: 'Error interno al obtener insights de Instagram' });
-  }
-});
-
-/* -------------------------------------------------------
-   8. ENDPOINT: Health Check
-------------------------------------------------------- */
-
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
 
-let IG_ACCESS_TOKEN = null; // se llena en el callback
-
-app.get('/ig/callback', async (req, res) => {
-  // ... convertir code en token
-  IG_ACCESS_TOKEN = tokenData.access_token;
-  IG_USER_ID = tokenData.user_id;
-  res.send("Token guardado en backend");
-});
-
-async function callInstagramGraph(endpoint, method = 'GET', body = null) {
-  const url = new URL(`https://graph.facebook.com/v24.0/${endpoint}`);
-  url.searchParams.set('access_token', IG_ACCESS_TOKEN);
-  // resto igual...
-}
-
-/* -------------------------------------------------------
-   9. ENDPOINT raíz (respuesta al abrir el link)
-------------------------------------------------------- */
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.send('✨ SOVYX backend activo y listo para recibir llamadas 🚀');
 });
 
