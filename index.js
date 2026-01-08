@@ -37,49 +37,38 @@ async function callInstagramGraph(endpoint, method = 'GET', body = null) {
 /* -------------------------------------------------------
    1. IG OAuth: Callback → token corto → token largo (~60d)
 ------------------------------------------------------- */
-app.get('/ig/callback', async (req, res) => {
+ app.get('/ig/callback', async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.status(400).send("Falta el code en la URL");
 
   try {
-    // 1) code → short-lived token
-    const params = new URLSearchParams();
-    params.append("client_id", process.env.CLIENT_ID);
-    params.append("client_secret", process.env.CLIENT_SECRET);
-    params.append("grant_type", "authorization_code");
-    params.append("redirect_uri", process.env.REDIRECT_URI);
-    params.append("code", code);
-
-    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
+    const igRes = await fetch("https://api.instagram.com/oauth/access_token", {
       method: "POST",
-      body: params
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.CLIENT_ID,
+        client_secret: process.env.CLIENT_SECRET,
+        grant_type: "authorization_code",
+        redirect_uri: process.env.REDIRECT_URI,
+        code: code
+      })
     });
-    const tokenData = await tokenRes.json();
-    if (tokenData.error_message) {
-      return res.status(400).json({ error: "OAuth error", raw: tokenData });
+
+    let data;
+    try {
+      data = await igRes.json();
+    } catch (err) {
+      const text = await igRes.text();
+      console.error("Error al convertir respuesta IG:", text);
+      return res.status(400).json({ error: "Instagram devolvió error", detail: text });
     }
 
-    // 2) short → long-lived token (~60 días)
-    const longRes = await fetch(
-      `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.CLIENT_SECRET}&access_token=${tokenData.access_token}`
-    );
-    const longData = await longRes.json();
-    if (longData.error) {
-      return res.status(400).json({ error: "Exchange error", raw: longData });
-    }
+    // si todo salió bien, guardas el token largo
+    console.log("Token largo recibido:", data);
+    return res.json({ status: "ok", ...data });
 
-    IG_ACCESS_TOKEN = longData.access_token;
-    IG_USER_ID = tokenData.user_id; // IG user id entregado por el paso de OAuth
-
-    res.json({
-      status: "ok",
-      message: "Token largo generado y guardado en backend",
-      user_id: IG_USER_ID,
-      long_token_expires_in: longData.expires_in
-    });
-  } catch (err) {
-    console.error("Error en IG callback:", err);
-    res.status(500).send("Error al convertir code en token");
+  } catch (error) {
+    console.error("Error en IG callback:", error);
+    return res.status(500).json({ error: "Fallo en callback", detail: error.message });
   }
 });
 
