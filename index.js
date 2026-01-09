@@ -13,9 +13,10 @@ app.use(express.json());
 /* -------------------------------------------------------
    0. CONFIG GLOBAL: Token dinámico
 ------------------------------------------------------- */
-let IG_ACCESS_TOKEN = null;   // se llena en /ig/callback
-let IG_USER_ID = null;        // se llena en /ig/callback
 
+// Usa variables de entorno para no hardcodear el token
+let IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;  
+let IG_USER_ID = process.env.IG_USER_ID;
 
 /* -------------------------------------------------------
    1.1 IG: Refresh token largo (extiende expiración)
