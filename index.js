@@ -14,21 +14,55 @@ app.use(express.json());
    0. CONFIG GLOBAL: Token dinámico
 ------------------------------------------------------- */
 
-// Usa variables de entorno para no hardcodear el token
-let IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;  
+// Variables para TU cuenta
+let IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 let IG_USER_ID = process.env.IG_USER_ID;
 
+// Definición de clientes
+const clients = {
+  client1: {
+    token: process.env.TOKENCLIENT1,
+    userId: process.env.USERIDCLIENT1
+  },
+  client2: {
+    token: process.env.TOKENCLIENT2,
+    userId: process.env.USERIDCLIENT2
+  }
+};
+
+// Función auxiliar para llamar al Graph API
+async function callInstagramGraph(endpoint, method = 'GET', body = {}, token) {
+  const url = `https://graph.instagram.com/${endpoint}?access_token=${token}`;
+  const options = { method };
+  if (method === 'POST') {
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, options);
+  return res.json();
+}
+
 /* -------------------------------------------------------
-   1.1 IG: Refresh token largo (extiende expiración)
+   1. Refresh token largo
 ------------------------------------------------------- */
-app.get('/ig/refresh', async (_req, res) => {
+app.get(['/ig/refresh', '/ig/:client/refresh'], async (req, res) => {
+  const { client } = req.params;
+  let token = IG_ACCESS_TOKEN;
+
+  if (client) {
+    if (!clients[client]) return res.status(400).json({ error: "Cliente no válido" });
+    token = clients[client].token;
+  }
+
   try {
-    if (!IG_ACCESS_TOKEN) return res.status(400).json({ error: "No hay token para refrescar" });
     const refreshRes = await fetch(
-      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${IG_ACCESS_TOKEN}`
+      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${token}`
     );
     const refreshData = await refreshRes.json();
-    if (refreshData.access_token) IG_ACCESS_TOKEN = refreshData.access_token;
+    if (refreshData.access_token) {
+      if (client) clients[client].token = refreshData.access_token;
+      else IG_ACCESS_TOKEN = refreshData.access_token;
+    }
     res.json(refreshData);
   } catch (err) {
     console.error("Error en IG refresh:", err);
@@ -37,44 +71,41 @@ app.get('/ig/refresh', async (_req, res) => {
 });
 
 /* -------------------------------------------------------
-   2. Publicar en Instagram (imagen + caption)
-   Requiere: IG_ACCESS_TOKEN dinámico y IG_USER_ID
+   2. Publicar en Instagram
 ------------------------------------------------------- */
-app.post('/api/instagram/publish', async (req, res) => {
+app.post(['/api/instagram/publish', '/api/:client/instagram/publish'], async (req, res) => {
+  const { client } = req.params;
+  const { caption, image_url } = req.body;
+
+  let token = IG_ACCESS_TOKEN;
+  let userId = IG_USER_ID;
+
+  if (client) {
+    if (!clients[client]) return res.status(400).json({ error: "Cliente no válido" });
+    token = clients[client].token;
+    userId = clients[client].userId;
+  }
+
+  if (!image_url) return res.status(400).json({ error: "Falta image_url pública para IG" });
+
   try {
-    const { caption, image_url } = req.body;
-    if (!IG_ACCESS_TOKEN || !IG_USER_ID) {
-      return res.status(400).json({ error: "Autentica primero por /ig/callback" });
-    }
-    if (!image_url) {
-      return res.status(400).json({ error: "Falta image_url pública para IG" });
-    }
-
-    // 1) Crear media contenedor (con image_url + caption)
     const creation = await callInstagramGraph(
-      `${IG_USER_ID}/media`,
+      `${userId}/media`,
       'POST',
-      { image_url, caption }
+      { image_url, caption },
+      token
     );
-    if (!creation.id) {
-      return res.status(400).json({ error: "No se pudo crear el contenedor", raw: creation });
-    }
 
-    // 2) Publicar el contenedor
+    if (!creation.id) return res.status(400).json({ error: "No se pudo crear el contenedor", raw: creation });
+
     const publish = await callInstagramGraph(
-      `${IG_USER_ID}/media_publish`,
+      `${userId}/media_publish`,
       'POST',
-      { creation_id: creation.id }
+      { creation_id: creation.id },
+      token
     );
-    if (publish.error) {
-      return res.status(400).json({ error: "No se pudo publicar", raw: publish });
-    }
 
-    res.json({
-      status: 'published',
-      creation_id: creation.id,
-      publish
-    });
+    res.json({ status: 'published', creation_id: creation.id, publish });
   } catch (err) {
     console.error('Error publicando en Instagram:', err);
     res.status(500).json({ error: 'Error interno al publicar en Instagram' });
@@ -82,17 +113,23 @@ app.post('/api/instagram/publish', async (req, res) => {
 });
 
 /* -------------------------------------------------------
-   3. Insights reales del media publicado
+   3. Insights
 ------------------------------------------------------- */
-app.get('/api/instagram/insights/:mediaId', async (req, res) => {
+app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:mediaId'], async (req, res) => {
+  const { client, mediaId } = req.params;
+
+  let token = IG_ACCESS_TOKEN;
+  if (client) {
+    if (!clients[client]) return res.status(400).json({ error: "Cliente no válido" });
+    token = clients[client].token;
+  }
+
   try {
-    const { mediaId } = req.params;
-    if (!IG_ACCESS_TOKEN) {
-      return res.status(400).json({ error: 'Autentica primero por /ig/callback' });
-    }
     const metrics = await callInstagramGraph(
       `${mediaId}/insights?metric=impressions,reach,saved,engagement`,
-      'GET'
+      'GET',
+      {},
+      token
     );
     res.json({ media_id: mediaId, metrics });
   } catch (err) {
@@ -104,15 +141,16 @@ app.get('/api/instagram/insights/:mediaId', async (req, res) => {
 /* -------------------------------------------------------
    4. Construir audiencia (100k, LATAM+EUROPA, high ticket)
 ------------------------------------------------------- */
-app.post('/api/audience/build', (req, res) => {
+app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
+  const { client } = req.params;
   const { session_id, constraints = {} } = req.body;
 
   const audiencia = {
     audience_id: 'aud_' + Date.now(),
-    size: constraints.size || 100000,
-    geo: constraints.geo || ["LATAM", "EUROPA"],
-    segment: constraints.segment || "high_ticket",
-    age_range: constraints.age_range || { min: 25, max: 45 },
+    size: constraints.size || 100000, // tamaño base 100k
+    geo: constraints.geo || ["LATAM", "EUROPA"], // regiones por defecto
+    segment: constraints.segment || "high_ticket", // segmento fijo
+    age_range: constraints.age_range || { min: 25, max: 45 }, // rango de edad
     business_type: constraints.business_type || [
       'emprendedores','creadores_contenido','fitness_influencers','agencias'
     ],
@@ -121,19 +159,24 @@ app.post('/api/audience/build', (req, res) => {
     ticket_min: constraints.ticket_min || 1000,
     ticket_max: constraints.ticket_max || 10000,
     quality_score: 0.9,
-    platform: constraints.platform || 'instagram'
+    platform: constraints.platform || 'instagram',
+    client_used: client || 'owner'
   };
 
   res.json(audiencia);
 });
 
 /* -------------------------------------------------------
-   5. Asignar delivery (24h + cierre estimado 30%)
+   5. Asignar delivery (100k cada 24h + cierre estimado 30%)
 ------------------------------------------------------- */
-app.post('/api/delivery/assign', (req, res) => {
+app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) => {
+  const { client } = req.params;
   const { session_id, audience_id, post, window_hours, constraints = {} } = req.body;
+
   const hours = window_hours || 24;
-  const reach_total = Math.floor(hours / 24) * 100000; // 100k cada 24h
+
+  // Alcance fijo: 100k cada 24h → proporcional en días
+  const reach_total = Math.floor(hours / 24) * 100000; 
   const cierre_estimado = Math.floor(reach_total * 0.30); // 30%
 
   const entrega = {
@@ -148,72 +191,22 @@ app.post('/api/delivery/assign', (req, res) => {
     ],
     revenue_stage: constraints.revenue_stage || '5k-10k mensual',
     experience_level: constraints.experience_level || 'intermedio',
+    ticket_min: constraints.ticket_min || 1000,
+    ticket_max: constraints.ticket_max || 10000,
     window_hours: hours,
     target: {
-      reach_total,
-      cierre_estimado,
+      reach_total,              // 100k cada 24h → proporcional
+      cierre_estimado,          // 30% de cierre estimado
       closure_rate_assumed: 0.30
     },
-    eta: new Date(Date.now() + hours * 3600 * 1000).toISOString()
+    eta: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
+    client_used: client || 'owner'
   };
 
   res.json(entrega);
 });
 
-/* -------------------------------------------------------
-   6. Lenguaje SOVYXIA High Ticket (config)
-------------------------------------------------------- */
-app.post('/api/language/configure', (req, res) => {
-  const {
-    niche,
-    ticket,
-    platform,
-    goal,
-    client_type,
-    style_preference,
-    experience_level
-  } = req.body;
 
-  const languageProfile = {
-    languageprofileid: 'lang_' + Date.now(),
-    tone: {
-      authority: "alta",
-      energy: style_preference === "agresivo" ? "alta" : "media_alta",
-      directness: "alta",
-      warmth: "media_baja"
-    },
-    narrative: {
-      core: [
-        "infraestructura que hace el resultado inevitable",
-        "control del entorno y del flujo de demanda",
-        "filtrado automático de quienes no pueden pagar"
-      ],
-      taboos: [
-        "discurso de escasez",
-        "pedir permiso",
-        "vender como si fueras una opción más"
-      ]
-    },
-    structure: {
-      content_types: [
-        "case_study",
-        "diagnostic_post",
-        "direct_offer",
-        "authority_thread"
-      ],
-      recommendedfrequencyper_week: 5
-    },
-    closing_style: {
-      filter_based: true,
-      calltoaction:
-        "si ya estás facturando y quieres estabilizar tickets altos, escribe 'ESTRUCTURA'",
-      disqualification_angle:
-        "si todavía estás probando ideas, este sistema no es para ti"
-    }
-  };
-
-  res.json(languageProfile);
-});
 
 /* -------------------------------------------------------
    7. Analizar contenido (texto + cierre)
