@@ -16,61 +16,6 @@ app.use(express.json());
 let IG_ACCESS_TOKEN = null;   // se llena en /ig/callback
 let IG_USER_ID = null;        // se llena en /ig/callback
 
-/* -------------------------------------------------------
-   0.1 Helper Instagram Graph API
-------------------------------------------------------- */
-async function callInstagramGraph(endpoint, method = 'GET', body = null) {
-  if (!IG_ACCESS_TOKEN) {
-    return { error: 'IG_ACCESS_TOKEN vacío. Autentica por /ig/callback primero.' };
-  }
-  const url = new URL(`https://graph.facebook.com/v24.0/${endpoint}`);
-  url.searchParams.set('access_token', IG_ACCESS_TOKEN);
-
-  const options = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body && method !== 'GET') options.body = JSON.stringify(body);
-
-  const response = await fetch(url.toString(), options);
-  const data = await response.json();
-  return data;
-}
-
-/* -------------------------------------------------------
-   1. IG OAuth: Callback → token corto → token largo (~60d)
-------------------------------------------------------- */
- app.get('/ig/callback', async (req, res) => {
-  const code = req.query.code;
-
-  try {
-    const igRes = await fetch("https://api.instagram.com/oauth/access_token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        grant_type: "authorization_code",
-        redirect_uri: process.env.REDIRECT_URI,
-        code: code
-      })
-    });
-
-    let data;
-    try {
-      data = await igRes.json();
-    } catch (err) {
-      const text = await igRes.text();
-      console.error("Error al convertir respuesta IG:", text);
-      return res.status(400).json({ error: "Instagram devolvió error", detail: text });
-    }
-
-    // si todo salió bien, guardas el token largo
-    console.log("Token largo recibido:", data);
-    return res.json({ status: "ok", ...data });
-
-  } catch (error) {
-    console.error("Error en IG callback:", error);
-    return res.status(500).json({ error: "Fallo en callback", detail: error.message });
-  }
-});
 
 /* -------------------------------------------------------
    1.1 IG: Refresh token largo (extiende expiración)
