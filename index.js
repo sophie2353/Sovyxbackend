@@ -138,7 +138,7 @@ app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:m
   }
 });
 
-// Tokens ya guardados en tu backend (owner + clientes)
+// Tokens ya guardados en tu backend (owner + clientes). sección 4.0
 const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 const IG_USER_ID = process.env.IG_USER_ID;
 
