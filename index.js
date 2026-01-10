@@ -138,15 +138,42 @@ app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:m
   }
 });
 
+// Tokens ya guardados en tu backend (owner + clientes)
+const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
+const IG_USER_ID = process.env.IG_USER_ID;
+
+const CLIENT1_ACCESS_TOKEN = process.env.CLIENT1_ACCESS_TOKEN;
+const CLIENT1_USER_ID = process.env.CLIENT1_USER_ID;
+
+const CLIENT2_ACCESS_TOKEN = process.env.CLIENT2_ACCESS_TOKEN;
+const CLIENT2_USER_ID = process.env.CLIENT2_USER_ID;
+
+const CLIENT3_ACCESS_TOKEN = process.env.CLIENT3_ACCESS_TOKEN;
+const CLIENT3_USER_ID = process.env.CLIENT3_USER_ID;
+
+// Mapeo dinámico
+const tokens = {
+  owner: { access_token: IG_ACCESS_TOKEN, user_id: IG_USER_ID },
+  client1: { access_token: CLIENT1_ACCESS_TOKEN, user_id: CLIENT1_USER_ID },
+  client2: { access_token: CLIENT2_ACCESS_TOKEN, user_id: CLIENT2_USER_ID },
+  client3: { access_token: CLIENT3_ACCESS_TOKEN, user_id: CLIENT3_USER_ID }
+};
+
 /* -------------------------------------------------------
    4. Construir audiencia (100k, LATAM+EUROPA, high ticket)
 ------------------------------------------------------- */
 app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
-  const { client } = req.params;
+  const { client = 'owner' } = req.params;
   const { session_id, constraints = {} } = req.body;
+  const { access_token, user_id } = tokens[client];
+
+  if (!access_token || !user_id) {
+    return res.status(400).json({ error: `Token o User ID no configurados para ${client}` });
+  }
 
   const audiencia = {
     audience_id: 'aud_' + Date.now(),
+    session_id,
     size: constraints.size || 100000, // tamaño base 100k
     geo: constraints.geo || ["LATAM", "EUROPA"], // regiones por defecto
     segment: constraints.segment || "high_ticket", // segmento fijo
@@ -160,7 +187,9 @@ app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
     ticket_max: constraints.ticket_max || 10000,
     quality_score: 0.9,
     platform: constraints.platform || 'instagram',
-    client_used: client || 'owner'
+    client_used: client,
+    user_id,
+    access_token_used: true
   };
 
   res.json(audiencia);
@@ -170,8 +199,13 @@ app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
    5. Asignar delivery (100k cada 24h + cierre estimado 30%)
 ------------------------------------------------------- */
 app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) => {
-  const { client } = req.params;
+  const { client = 'owner' } = req.params;
   const { session_id, audience_id, post, window_hours, constraints = {} } = req.body;
+  const { access_token, user_id } = tokens[client];
+
+  if (!access_token || !user_id) {
+    return res.status(400).json({ error: `Token o User ID no configurados para ${client}` });
+  }
 
   const hours = window_hours || 24;
 
@@ -182,6 +216,7 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
   const entrega = {
     delivery_id: 'deliv_' + Date.now(),
     status: 'scheduled',
+    session_id,
     audience_id,
     post,
     geo: constraints.geo || ['LATAM', 'EUROPA'],
@@ -200,13 +235,13 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
       closure_rate_assumed: 0.30
     },
     eta: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
-    client_used: client || 'owner'
+    client_used: client,
+    user_id,
+    access_token_used: true
   };
 
   res.json(entrega);
 });
-
-
 
 /* -------------------------------------------------------
    7. Analizar contenido (texto + cierre)
