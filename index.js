@@ -14,20 +14,26 @@ app.use(express.json());
    0. CONFIG GLOBAL: Token dinámico
 ------------------------------------------------------- */
 
-// Variables para TU cuenta
+// Variables para TU cuenta (owner)
 let IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 let IG_USER_ID = process.env.IG_USER_ID;
 
 // Definición de clientes
-const clients = {
-  client1: {
-    token: process.env.TOKENCLIENT1,
-    userId: process.env.USERIDCLIENT1
-  },
-  client2: {
-    token: process.env.TOKENCLIENT2,
-    userId: process.env.USERIDCLIENT2
-  }
+let CLIENT1_ACCESS_TOKEN = process.env.CLIENT1_ACCESS_TOKEN;
+let CLIENT1_USER_ID = process.env.CLIENT1_USER_ID;
+
+let CLIENT2_ACCESS_TOKEN = process.env.CLIENT2_ACCESS_TOKEN;
+let CLIENT2_USER_ID = process.env.CLIENT2_USER_ID;
+
+let CLIENT3_ACCESS_TOKEN = process.env.CLIENT3_ACCESS_TOKEN;
+let CLIENT3_USER_ID = process.env.CLIENT3_USER_ID;
+
+// Mapeo dinámico de tokens
+const tokens = {
+  owner: { access_token: IG_ACCESS_TOKEN, user_id: IG_USER_ID },
+  client1: { access_token: CLIENT1_ACCESS_TOKEN, user_id: CLIENT1_USER_ID },
+  client2: { access_token: CLIENT2_ACCESS_TOKEN, user_id: CLIENT2_USER_ID },
+  client3: { access_token: CLIENT3_ACCESS_TOKEN, user_id: CLIENT3_USER_ID }
 };
 
 // Función auxiliar para llamar al Graph API
@@ -50,8 +56,8 @@ app.get(['/ig/refresh', '/ig/:client/refresh'], async (req, res) => {
   let token = IG_ACCESS_TOKEN;
 
   if (client) {
-    if (!clients[client]) return res.status(400).json({ error: "Cliente no válido" });
-    token = clients[client].token;
+    if (!tokens[client]) return res.status(400).json({ error: "Cliente no válido" });
+    token = tokens[client].access_token;
   }
 
   try {
@@ -60,7 +66,7 @@ app.get(['/ig/refresh', '/ig/:client/refresh'], async (req, res) => {
     );
     const refreshData = await refreshRes.json();
     if (refreshData.access_token) {
-      if (client) clients[client].token = refreshData.access_token;
+      if (client) tokens[client].access_token = refreshData.access_token;
       else IG_ACCESS_TOKEN = refreshData.access_token;
     }
     res.json(refreshData);
@@ -81,9 +87,9 @@ app.post(['/api/instagram/publish', '/api/:client/instagram/publish'], async (re
   let userId = IG_USER_ID;
 
   if (client) {
-    if (!clients[client]) return res.status(400).json({ error: "Cliente no válido" });
-    token = clients[client].token;
-    userId = clients[client].userId;
+    if (!tokens[client]) return res.status(400).json({ error: "Cliente no válido" });
+    token = tokens[client].access_token;
+    userId = tokens[client].user_id;
   }
 
   if (!image_url) return res.status(400).json({ error: "Falta image_url pública para IG" });
@@ -120,8 +126,8 @@ app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:m
 
   let token = IG_ACCESS_TOKEN;
   if (client) {
-    if (!clients[client]) return res.status(400).json({ error: "Cliente no válido" });
-    token = clients[client].token;
+    if (!tokens[client]) return res.status(400).json({ error: "Cliente no válido" });
+    token = tokens[client].access_token;
   }
 
   try {
@@ -138,27 +144,6 @@ app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:m
   }
 });
 
-// Tokens ya guardados en tu backend (owner + clientes). sección 4.0
-const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
-const IG_USER_ID = process.env.IG_USER_ID;
-
-const CLIENT1_ACCESS_TOKEN = process.env.CLIENT1_ACCESS_TOKEN;
-const CLIENT1_USER_ID = process.env.CLIENT1_USER_ID;
-
-const CLIENT2_ACCESS_TOKEN = process.env.CLIENT2_ACCESS_TOKEN;
-const CLIENT2_USER_ID = process.env.CLIENT2_USER_ID;
-
-const CLIENT3_ACCESS_TOKEN = process.env.CLIENT3_ACCESS_TOKEN;
-const CLIENT3_USER_ID = process.env.CLIENT3_USER_ID;
-
-// Mapeo dinámico
-const tokens = {
-  owner: { access_token: IG_ACCESS_TOKEN, user_id: IG_USER_ID },
-  client1: { access_token: CLIENT1_ACCESS_TOKEN, user_id: CLIENT1_USER_ID },
-  client2: { access_token: CLIENT2_ACCESS_TOKEN, user_id: CLIENT2_USER_ID },
-  client3: { access_token: CLIENT3_ACCESS_TOKEN, user_id: CLIENT3_USER_ID }
-};
-
 /* -------------------------------------------------------
    4. Construir audiencia (100k, LATAM+EUROPA, high ticket)
 ------------------------------------------------------- */
@@ -174,10 +159,10 @@ app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
   const audiencia = {
     audience_id: 'aud_' + Date.now(),
     session_id,
-    size: constraints.size || 100000, // tamaño base 100k
-    geo: constraints.geo || ["LATAM", "EUROPA"], // regiones por defecto
-    segment: constraints.segment || "high_ticket", // segmento fijo
-    age_range: constraints.age_range || { min: 25, max: 45 }, // rango de edad
+    size: constraints.size || 100000,
+    geo: constraints.geo || ["LATAM", "EUROPA"],
+    segment: constraints.segment || "high_ticket",
+    age_range: constraints.age_range || { min: 25, max: 45 },
     business_type: constraints.business_type || [
       'emprendedores','creadores_contenido','fitness_influencers','agencias'
     ],
@@ -208,10 +193,8 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
   }
 
   const hours = window_hours || 24;
-
-  // Alcance fijo: 100k cada 24h → proporcional en días
-  const reach_total = Math.floor(hours / 24) * 100000; 
-  const cierre_estimado = Math.floor(reach_total * 0.30); // 30%
+  const reach_total = Math.floor(hours / 24) * 100000;
+  const cierre_estimado = Math.floor(reach_total * 0.30);
 
   const entrega = {
     delivery_id: 'deliv_' + Date.now(),
@@ -230,8 +213,8 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
     ticket_max: constraints.ticket_max || 10000,
     window_hours: hours,
     target: {
-      reach_total,              // 100k cada 24h → proporcional
-      cierre_estimado,          // 30% de cierre estimado
+      reach_total,
+      cierre_estimado,
       closure_rate_assumed: 0.30
     },
     eta: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
