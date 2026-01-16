@@ -203,9 +203,140 @@ app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:m
 });
 
 /* -------------------------------------------------------
-   4. Construir audiencia (100k, LATAM+EUROPA, high ticket)
+   ENDPOINT UNIFICADO: CAMPAÑA COMPLETA
+   Combina: /api/audience/create + /api/delivery/assign
 ------------------------------------------------------- */
-app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
+app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
+  const { client = 'owner' } = req.params;
+  const { 
+    session_id, 
+    post, 
+    window_hours = 24, 
+    constraints = {} 
+  } = req.body;
+  
+  const { access_token, user_id } = tokens[client];
+
+  // Validación de tokens
+  if (!access_token || !user_id) {
+    return res.status(400).json({ 
+      error: `Token o User ID no configurados para ${client}`,
+      status: 'error'
+    });
+  }
+
+  // Validación de campos requeridos
+  if (!session_id) {
+    return res.status(400).json({ 
+      error: 'session_id es requerido',
+      status: 'error'
+    });
+  }
+
+  // Timestamp común
+  const timestamp = Date.now();
+
+  // 🔹 1. CREAR AUDIENCIA (primera parte unificada)
+  const audiencia = {
+    audience_id: 'aud_' + timestamp,
+    session_id,
+    size: constraints.size || 100000,
+    geo: constraints.geo || ["LATAM", "EUROPA"],
+    segment: constraints.segment || "high_ticket",
+    age_range: constraints.age_range || { min: 25, max: 45 },
+    business_type: constraints.business_type || [
+      'emprendedores',
+      'creadores_contenido',
+      'fitness_influencers',
+      'agencias'
+    ],
+    revenue_stage: constraints.revenue_stage || '5k-10k mensual',
+    experience_level: constraints.experience_level || 'intermedio',
+    ticket_min: constraints.ticket_min || 1000,
+    ticket_max: constraints.ticket_max || 10000,
+    quality_score: 0.9,
+    platform: constraints.platform || 'instagram',
+    client_used: client,
+    user_id,
+    access_token_used: true,
+    created_at: new Date(timestamp).toISOString()
+  };
+
+  // 🔹 2. CREAR DELIVERY (segunda parte unificada)
+  const hours = window_hours;
+  const reach_total = Math.floor(hours / 24) * 100000;
+  const cierre_estimado = Math.floor(reach_total * 0.30);
+
+  const delivery = {
+    delivery_id: 'deliv_' + timestamp,
+    status: 'scheduled',
+    session_id,
+    audience_id: audiencia.audience_id, // Enlazado automáticamente
+    post: post || 'Sin contenido especificado',
+    geo: constraints.geo || ['LATAM', 'EUROPA'],
+    age_range: constraints.age_range || { min: 25, max: 45 },
+    business_type: constraints.business_type || [
+      'emprendedores',
+      'creadores_contenido',
+      'fitness_influencers',
+      'agencias'
+    ],
+    revenue_stage: constraints.revenue_stage || '5k-10k mensual',
+    experience_level: constraints.experience_level || 'intermedio',
+    ticket_min: constraints.ticket_min || 1000,
+    ticket_max: constraints.ticket_max || 10000,
+    window_hours: hours,
+    target: {
+      reach_total,
+      cierre_estimado,
+      closure_rate_assumed: 0.30,
+      cpm_estimated: 15.50
+    },
+    eta: new Date(timestamp + hours * 3600 * 1000).toISOString(),
+    client_used: client,
+    user_id,
+    access_token_used: true,
+    scheduled_at: new Date(timestamp).toISOString()
+  };
+
+  // 🔹 3. RESPUESTA UNIFICADA
+  const campaign = {
+    status: 'success',
+    campaign_id: 'camp_' + timestamp,
+    unified_response: true,
+    timestamp: new Date().toISOString(),
+    
+    // Datos originales (igual que antes)
+    audience: audiencia,
+    delivery: delivery,
+    
+    // Resumen combinado
+    summary: {
+      total_audience: audiencia.size,
+      delivery_window: `${hours} horas`,
+      estimated_reach: reach_total,
+      estimated_closures: cierre_estimado,
+      client: client,
+      platform: audiencia.platform
+    },
+    
+    // Metadata para tracking
+    metadata: {
+      endpoints_consolidated: ['audience/create', 'delivery/assign'],
+      single_call: true,
+      response_time_ms: Date.now() - timestamp,
+      version: '1.0'
+    }
+  };
+
+  res.json(campaign);
+});
+
+/* -------------------------------------------------------
+   ENDPOINTS INDIVIDUALES (para compatibilidad)
+   Si todavía necesitas llamarlos por separado
+------------------------------------------------------- */
+app.post(['/api/audience/create', '/api/:client/audience/create'], (req, res) => {
   const { client = 'owner' } = req.params;
   const { session_id, constraints = {} } = req.body;
   const { access_token, user_id } = tokens[client];
@@ -238,9 +369,6 @@ app.post(['/api/audience/build', '/api/:client/audience/build'], (req, res) => {
   res.json(audiencia);
 });
 
-/* -------------------------------------------------------
-   5. Asignar delivery (100k cada 24h + cierre estimado 30%)
-------------------------------------------------------- */
 app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) => {
   const { client = 'owner' } = req.params;
   const { session_id, audience_id, post, window_hours, constraints = {} } = req.body;
@@ -249,7 +377,7 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
   if (!access_token || !user_id) {
     return res.status(400).json({ error: `Token o User ID no configurados para ${client}` });
   }
-
+  
   const hours = window_hours || 24;
   const reach_total = Math.floor(hours / 24) * 100000;
   const cierre_estimado = Math.floor(reach_total * 0.30);
