@@ -9,6 +9,12 @@ const app = express();
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 app.use(express.json());
+const cors = require('cors');
+
+app.use(cors({
+  origin: 'https://sophie2353.github.io',
+  methods: ['POST', 'GET', 'OPTIONS'],
+  credentials: true
 
 /* -------------------------------------------------------
    0. CONFIG GLOBAL: Token dinámico
