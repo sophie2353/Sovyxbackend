@@ -2,7 +2,7 @@
    SOVYX Backend - IG OAuth + Segmentación + Delivery
 ------------------------------------------------------- */
 
-. require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -10,15 +10,64 @@ const app = express();
 // Compatibilidad con Node <18
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
+// ========== CONFIGURACIÓN GLOBAL: Token dinámico ==========
+// Variables para TU cuenta (owner) - USAR CONST en lugar de LET
+const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN || '';
+const IG_USER_ID = process.env.IG_USER_ID || '';
+
+// Definición de clientes
+const CLIENT1_ACCESS_TOKEN = process.env.CLIENT1_ACCESS_TOKEN || '';
+const CLIENT1_USER_ID = process.env.CLIENT1_USER_ID || '';
+
+const CLIENT2_ACCESS_TOKEN = process.env.CLIENT2_ACCESS_TOKEN || '';
+const CLIENT2_USER_ID = process.env.CLIENT2_USER_ID || '';
+
+const CLIENT3_ACCESS_TOKEN = process.env.CLIENT3_ACCESS_TOKEN || '';
+const CLIENT3_USER_ID = process.env.CLIENT3_USER_ID || '';
+
+const CLIENT4_ACCESS_TOKEN = process.env.CLIENT4_ACCESS_TOKEN || '';
+const CLIENT4_USER_ID = process.env.CLIENT4_USER_ID || '';
+
+const CLIENT5_ACCESS_TOKEN = process.env.CLIENT5_ACCESS_TOKEN || '';
+const CLIENT5_USER_ID = process.env.CLIENT5_USER_ID || '';
+
+// Mapeo dinámico de tokens
+const tokens = {
+  owner: { 
+    access_token: IG_ACCESS_TOKEN, 
+    user_id: IG_USER_ID 
+  },
+  client1: { 
+    access_token: CLIENT1_ACCESS_TOKEN, 
+    user_id: CLIENT1_USER_ID 
+  },
+  client2: { 
+    access_token: CLIENT2_ACCESS_TOKEN, 
+    user_id: CLIENT2_USER_ID 
+  },
+  client3: { 
+    access_token: CLIENT3_ACCESS_TOKEN, 
+    user_id: CLIENT3_USER_ID 
+  },
+  client4: { 
+    access_token: CLIENT4_ACCESS_TOKEN, 
+    user_id: CLIENT4_USER_ID 
+  },
+  client5: { 
+    access_token: CLIENT5_ACCESS_TOKEN, 
+    user_id: CLIENT5_USER_ID 
+  }
+};
+
 // CONFIGURACIÓN DEFINITIVA DE CORS PARA GITHUB PAGES → VERCEL
 const corsOptions = {
   origin: [
-    'https://sophie2353.github.io', // Todos los GitHub Pages
-    'http://localhost:3000', // React dev server
-    'http://localhost:5173', // Vite dev server
-    'http://localhost:5500', // Live Server
-    'http://127.0.0.1:5500', // Live Server alternativo
-    'http://localhost:8080' // Otro puerto común
+    'https://sophie2353.github.io', // Tu GitHub Pages
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+    'http://localhost:8080'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
@@ -31,7 +80,7 @@ const corsOptions = {
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   credentials: true,
-  maxAge: 86400, // 24 horas de cache para preflight
+  maxAge: 86400,
   optionsSuccessStatus: 204
 };
 
@@ -41,11 +90,24 @@ app.use(cors(corsOptions));
 // Manejar preflight OPTIONS para todas las rutas
 app.options('*', cors(corsOptions));
 
-// Middleware para parsear JSON
+// Middleware para parsear JSON y URL encoded
 app.use(express.json());
-
-// Middleware para parsear URL encoded
 app.use(express.urlencoded({ extended: true }));
+
+// ========== FUNCIONES AUXILIARES ==========
+// Función auxiliar para llamar al Graph API de Instagram
+async function callInstagramGraph(endpoint, method = 'GET', body = {}, token) {
+  const url = `https://graph.instagram.com/${endpoint}?access_token=${token}`;
+  const options = { method };
+  if (method === 'POST') {
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, options);
+  return res.json();
+}
+
+// ========== RUTAS ==========
 
 // Ruta de prueba CORS
 app.get('/cors-test', (req, res) => {
@@ -59,63 +121,48 @@ app.get('/cors-test', (req, res) => {
   });
 });
 
-// Tu código existente aquí debajo...
-// (tus rutas, lógica, etc.)
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Backend en Vercel (puerto: ${PORT})`);
-  console.log(`✅ CORS habilitado para GitHub Pages`);
-  console.log(`🌐 Orígenes permitidos: ${corsOptions.origin.join(', ')}`);
+// Health y raíz
+app.get('/health', (_req, res) => {
+  res.json({ 
+    ok: true, 
+    time: new Date().toISOString(),
+    tokens_configured: Object.keys(tokens).filter(client => tokens[client].access_token && tokens[client].user_id)
+  });
 });
-/* -------------------------------------------------------
-   0. CONFIG GLOBAL: Token dinámico
-------------------------------------------------------- */
 
-// Variables para TU cuenta (owner)
-let IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
-let IG_USER_ID = process.env.IG_USER_ID;
-
-// Definición de clientes
-let CLIENT1_ACCESS_TOKEN = process.env.CLIENT1_ACCESS_TOKEN;
-let CLIENT1_USER_ID = process.env.CLIENT1_USER_ID;
-
-let CLIENT2_ACCESS_TOKEN = process.env.CLIENT2_ACCESS_TOKEN;
-let CLIENT2_USER_ID = process.env.CLIENT2_USER_ID;
-
-let CLIENT3_ACCESS_TOKEN = process.env.CLIENT3_ACCESS_TOKEN;
-let CLIENT3_USER_ID = process.env.CLIENT3_USER_ID;
-
-// Mapeo dinámico de tokens
-const tokens = {
-  owner: { access_token: IG_ACCESS_TOKEN, user_id: IG_USER_ID },
-  client1: { access_token: CLIENT1_ACCESS_TOKEN, user_id: CLIENT1_USER_ID },
-  client2: { access_token: CLIENT2_ACCESS_TOKEN, user_id: CLIENT2_USER_ID },
-  client3: { access_token: CLIENT3_ACCESS_TOKEN, user_id: CLIENT3_USER_ID }
-};
-
-// Función auxiliar para llamar al Graph API
-async function callInstagramGraph(endpoint, method = 'GET', body = {}, token) {
-  const url = `https://graph.instagram.com/${endpoint}?access_token=${token}`;
-  const options = { method };
-  if (method === 'POST') {
-    options.headers = { 'Content-Type': 'application/json' };
-    options.body = JSON.stringify(body);
-  }
-  const res = await fetch(url, options);
-  return res.json();
-}
+app.get('/', (_req, res) => {
+  res.json({ 
+    message: '✨ SOVYX backend activo',
+    endpoints: {
+      campaign: 'POST /api/campaign',
+      refresh_token: 'GET /ig/refresh',
+      health: 'GET /health',
+      cors_test: 'GET /cors-test'
+    },
+    clients_available: Object.keys(tokens)
+  });
+});
 
 /* -------------------------------------------------------
-   1. Refresh token largo
+   1. Refresh token largo (Instagram)
 ------------------------------------------------------- */
 app.get(['/ig/refresh', '/ig/:client/refresh'], async (req, res) => {
   const { client } = req.params;
-  let token = IG_ACCESS_TOKEN;
-
-  if (client) {
-    if (!tokens[client]) return res.status(400).json({ error: "Cliente no válido" });
+  
+  // Determinar qué token usar
+  let token;
+  if (client && tokens[client]) {
     token = tokens[client].access_token;
+  } else {
+    token = IG_ACCESS_TOKEN;
+  }
+  
+  if (!token || token === '') {
+    return res.status(400).json({ 
+      error: "Token no configurado",
+      client: client || 'owner',
+      hint: "Configura IG_ACCESS_TOKEN en variables de entorno"
+    });
   }
 
   try {
@@ -123,82 +170,20 @@ app.get(['/ig/refresh', '/ig/:client/refresh'], async (req, res) => {
       `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${token}`
     );
     const refreshData = await refreshRes.json();
-    if (refreshData.access_token) {
-      if (client) tokens[client].access_token = refreshData.access_token;
-      else IG_ACCESS_TOKEN = refreshData.access_token;
-    }
-    res.json(refreshData);
+    
+    // NOTA: En producción real, deberías actualizar la variable o DB
+    res.json({
+      status: 'success',
+      message: 'Token refresh ejecutado',
+      data: refreshData,
+      note: 'En desarrollo, actualiza manualmente las variables de entorno'
+    });
   } catch (err) {
     console.error("Error en IG refresh:", err);
-    res.status(500).json({ error: "Error refrescando token" });
-  }
-});
-
-/* -------------------------------------------------------
-   2. Publicar en Instagram
-------------------------------------------------------- */
-app.post(['/api/instagram/publish', '/api/:client/instagram/publish'], async (req, res) => {
-  const { client } = req.params;
-  const { caption, image_url } = req.body;
-
-  let token = IG_ACCESS_TOKEN;
-  let userId = IG_USER_ID;
-
-  if (client) {
-    if (!tokens[client]) return res.status(400).json({ error: "Cliente no válido" });
-    token = tokens[client].access_token;
-    userId = tokens[client].user_id;
-  }
-
-  if (!image_url) return res.status(400).json({ error: "Falta image_url pública para IG" });
-
-  try {
-    const creation = await callInstagramGraph(
-      `${userId}/media`,
-      'POST',
-      { image_url, caption },
-      token
-    );
-
-    if (!creation.id) return res.status(400).json({ error: "No se pudo crear el contenedor", raw: creation });
-
-    const publish = await callInstagramGraph(
-      `${userId}/media_publish`,
-      'POST',
-      { creation_id: creation.id },
-      token
-    );
-
-    res.json({ status: 'published', creation_id: creation.id, publish });
-  } catch (err) {
-    console.error('Error publicando en Instagram:', err);
-    res.status(500).json({ error: 'Error interno al publicar en Instagram' });
-  }
-});
-
-/* -------------------------------------------------------
-   3. Insights
-------------------------------------------------------- */
-app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:mediaId'], async (req, res) => {
-  const { client, mediaId } = req.params;
-
-  let token = IG_ACCESS_TOKEN;
-  if (client) {
-    if (!tokens[client]) return res.status(400).json({ error: "Cliente no válido" });
-    token = tokens[client].access_token;
-  }
-
-  try {
-    const metrics = await callInstagramGraph(
-      `${mediaId}/insights?metric=impressions,reach,saved,engagement`,
-      'GET',
-      {},
-      token
-    );
-    res.json({ media_id: mediaId, metrics });
-  } catch (err) {
-    console.error('Error obteniendo insights:', err);
-    res.status(500).json({ error: 'Error interno al obtener insights' });
+    res.status(500).json({ 
+      error: "Error refrescando token",
+      details: err.message 
+    });
   }
 });
 
@@ -215,13 +200,23 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
     constraints = {} 
   } = req.body;
   
-  const { access_token, user_id } = tokens[client];
+  // Obtener tokens del cliente
+  const clientTokens = tokens[client];
+  if (!clientTokens) {
+    return res.status(404).json({ 
+      error: `Cliente "${client}" no encontrado`,
+      available_clients: Object.keys(tokens)
+    });
+  }
+  
+  const { access_token, user_id } = clientTokens;
 
-  // Validación de tokens
-  if (!access_token || !user_id) {
+  // Validación de tokens (solo verifica si están vacíos)
+  if (!access_token || access_token === '' || !user_id || user_id === '') {
     return res.status(400).json({ 
       error: `Token o User ID no configurados para ${client}`,
-      status: 'error'
+      status: 'error',
+      hint: `Configura ${client.toUpperCase()}_ACCESS_TOKEN y ${client.toUpperCase()}_USER_ID en variables de entorno`
     });
   }
 
@@ -236,7 +231,7 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
   // Timestamp común
   const timestamp = Date.now();
 
-  // 🔹 1. CREAR AUDIENCIA (primera parte unificada)
+  // 🔹 1. CREAR AUDIENCIA
   const audiencia = {
     audience_id: 'aud_' + timestamp,
     session_id,
@@ -262,7 +257,7 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
     created_at: new Date(timestamp).toISOString()
   };
 
-  // 🔹 2. CREAR DELIVERY (segunda parte unificada)
+  // 🔹 2. CREAR DELIVERY
   const hours = window_hours;
   const reach_total = Math.floor(hours / 24) * 100000;
   const cierre_estimado = Math.floor(reach_total * 0.30);
@@ -271,7 +266,7 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
     delivery_id: 'deliv_' + timestamp,
     status: 'scheduled',
     session_id,
-    audience_id: audiencia.audience_id, // Enlazado automáticamente
+    audience_id: audiencia.audience_id,
     post: post || 'Sin contenido especificado',
     geo: constraints.geo || ['LATAM', 'EUROPA'],
     age_range: constraints.age_range || { min: 25, max: 45 },
@@ -306,11 +301,9 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
     unified_response: true,
     timestamp: new Date().toISOString(),
     
-    // Datos originales (igual que antes)
     audience: audiencia,
     delivery: delivery,
     
-    // Resumen combinado
     summary: {
       total_audience: audiencia.size,
       delivery_window: `${hours} horas`,
@@ -320,7 +313,6 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
       platform: audiencia.platform
     },
     
-    // Metadata para tracking
     metadata: {
       endpoints_consolidated: ['audience/create', 'delivery/assign'],
       single_call: true,
@@ -334,15 +326,26 @@ app.post(['/api/campaign', '/api/:client/campaign'], (req, res) => {
 
 /* -------------------------------------------------------
    ENDPOINTS INDIVIDUALES (para compatibilidad)
-   Si todavía necesitas llamarlos por separado
 ------------------------------------------------------- */
 app.post(['/api/audience/create', '/api/:client/audience/create'], (req, res) => {
   const { client = 'owner' } = req.params;
   const { session_id, constraints = {} } = req.body;
-  const { access_token, user_id } = tokens[client];
+  
+  const clientTokens = tokens[client];
+  if (!clientTokens) {
+    return res.status(404).json({ 
+      error: `Cliente "${client}" no encontrado`,
+      available_clients: Object.keys(tokens)
+    });
+  }
+  
+  const { access_token, user_id } = clientTokens;
 
-  if (!access_token || !user_id) {
-    return res.status(400).json({ error: `Token o User ID no configurados para ${client}` });
+  if (!access_token || access_token === '') {
+    return res.status(400).json({ 
+      error: `Token no configurado para ${client}`,
+      hint: `Configura ${client.toUpperCase()}_ACCESS_TOKEN en variables de entorno`
+    });
   }
 
   const audiencia = {
@@ -362,7 +365,7 @@ app.post(['/api/audience/create', '/api/:client/audience/create'], (req, res) =>
     quality_score: 0.9,
     platform: constraints.platform || 'instagram',
     client_used: client,
-    user_id,
+    user_id: user_id || 'not_required',
     access_token_used: true
   };
 
@@ -372,10 +375,22 @@ app.post(['/api/audience/create', '/api/:client/audience/create'], (req, res) =>
 app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) => {
   const { client = 'owner' } = req.params;
   const { session_id, audience_id, post, window_hours, constraints = {} } = req.body;
-  const { access_token, user_id } = tokens[client];
+  
+  const clientTokens = tokens[client];
+  if (!clientTokens) {
+    return res.status(404).json({ 
+      error: `Cliente "${client}" no encontrado`,
+      available_clients: Object.keys(tokens)
+    });
+  }
+  
+  const { access_token, user_id } = clientTokens;
 
-  if (!access_token || !user_id) {
-    return res.status(400).json({ error: `Token o User ID no configurados para ${client}` });
+  if (!access_token || access_token === '') {
+    return res.status(400).json({ 
+      error: `Token no configurado para ${client}`,
+      hint: `Configura ${client.toUpperCase()}_ACCESS_TOKEN en variables de entorno`
+    });
   }
   
   const hours = window_hours || 24;
@@ -405,7 +420,7 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
     },
     eta: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
     client_used: client,
-    user_id,
+    user_id: user_id || 'not_required',
     access_token_used: true
   };
 
@@ -413,13 +428,13 @@ app.post(['/api/delivery/assign', '/api/:client/delivery/assign'], (req, res) =>
 });
 
 /* -------------------------------------------------------
-   7. Analizar contenido (texto + cierre)
+   Analizar contenido (simulado)
 ------------------------------------------------------- */
 app.post('/api/content/analyze', (req, res) => {
   const { posts = [] } = req.body;
 
   const analysis = {
-    analysisid: 'analysis' + Date.now(),
+    analysis_id: 'analysis' + Date.now(),
     summary: {
       clarity_score: 0.78,
       authority_score: 0.72,
@@ -441,7 +456,7 @@ app.post('/api/content/analyze', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   8. Recalibrar contenido (versión optimizada)
+   Recalibrar contenido (simulado)
 ------------------------------------------------------- */
 app.post('/api/content/recalibrate', (req, res) => {
   const { post, objective } = req.body;
@@ -460,20 +475,44 @@ app.post('/api/content/recalibrate', (req, res) => {
 });
 
 /* -------------------------------------------------------
-   9. Health y raíz
+   Insights (Instagram) - Mantenido por si lo necesitas
 ------------------------------------------------------- */
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
-});
+app.get(['/api/instagram/insights/:mediaId', '/api/:client/instagram/insights/:mediaId'], async (req, res) => {
+  const { client, mediaId } = req.params;
 
-app.get('/', (_req, res) => {
-  res.send('✨ SOVYX backend activo y listo para recibir llamadas 🚀');
+  const token = client && tokens[client] ? tokens[client].access_token : IG_ACCESS_TOKEN;
+  
+  if (!token || token === '') {
+    return res.status(400).json({ 
+      error: "Token de Instagram no configurado",
+      client: client || 'owner'
+    });
+  }
+
+  try {
+    const metrics = await callInstagramGraph(
+      `${mediaId}/insights?metric=impressions,reach,saved,engagement`,
+      'GET',
+      {},
+      token
+    );
+    res.json({ media_id: mediaId, metrics });
+  } catch (err) {
+    console.error('Error obteniendo insights:', err);
+    res.status(500).json({ 
+      error: 'Error al obtener insights',
+      details: err.message 
+    });
+  }
 });
 
 /* -------------------------------------------------------
-   10. SERVIDOR
+   SERVIDOR (SOLO UN app.listen())
 ------------------------------------------------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`SOVYX backend activo en puerto ${PORT}`);
+  console.log(`🚀 SOVYX backend activo en puerto ${PORT}`);
+  console.log(`✅ CORS habilitado para: ${corsOptions.origin.join(', ')}`);
+  console.log(`👥 Clientes disponibles: ${Object.keys(tokens).join(', ')}`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
 });
