@@ -1,14 +1,23 @@
 {
   "name": "sovyx-backend",
   "version": "1.0.0",
+  "description": "Backend para Sovyx con Instagram API y segmentación",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"No tests specified\" && exit 0"
   },
+  "keywords": ["instagram", "api", "backend", "segmentation"],
+  "author": "Sovyx",
+  "license": "MIT",
   "dependencies": {
-  "cors": "^2.8.5",
-  "express": "^4.18.2",
-  "dotenv": "^16.0.3",
-  "node-fetch": "^3.3.0"
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "node-fetch": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
 }
-
