@@ -1,15 +1,73 @@
 /* -------------------------------------------------------
    SOVYX Backend - IG OAuth + Segmentación + Delivery
 ------------------------------------------------------- */
-require('dotenv').config();
+
+. require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const app = express();
 
-// Compatibilidad con Node <18 (Railway suele usar 16)
+// Compatibilidad con Node <18
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
+// CONFIGURACIÓN DEFINITIVA DE CORS PARA GITHUB PAGES → VERCEL
+const corsOptions = {
+  origin: [
+    'https://sophie2353.github.io', // Todos los GitHub Pages
+    'http://localhost:3000', // React dev server
+    'http://localhost:5173', // Vite dev server
+    'http://localhost:5500', // Live Server
+    'http://127.0.0.1:5500', // Live Server alternativo
+    'http://localhost:8080' // Otro puerto común
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'Origin',
+    'X-Requested-With',
+    'X-Api-Key'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  credentials: true,
+  maxAge: 86400, // 24 horas de cache para preflight
+  optionsSuccessStatus: 204
+};
+
+// Aplicar CORS a todas las rutas
+app.use(cors(corsOptions));
+
+// Manejar preflight OPTIONS para todas las rutas
+app.options('*', cors(corsOptions));
+
+// Middleware para parsear JSON
 app.use(express.json());
 
+// Middleware para parsear URL encoded
+app.use(express.urlencoded({ extended: true }));
+
+// Ruta de prueba CORS
+app.get('/cors-test', (req, res) => {
+  res.json({
+    success: true,
+    message: '✅ CORS configurado correctamente',
+    frontendOrigin: req.headers.origin || 'No origin header',
+    backend: 'Vercel',
+    allowedOrigins: corsOptions.origin,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Tu código existente aquí debajo...
+// (tus rutas, lógica, etc.)
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Backend en Vercel (puerto: ${PORT})`);
+  console.log(`✅ CORS habilitado para GitHub Pages`);
+  console.log(`🌐 Orígenes permitidos: ${corsOptions.origin.join(', ')}`);
+});
 /* -------------------------------------------------------
    0. CONFIG GLOBAL: Token dinámico
 ------------------------------------------------------- */
