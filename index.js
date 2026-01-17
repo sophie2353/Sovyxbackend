@@ -492,6 +492,27 @@ app.get(['/ig/refresh', '/ig/:client/refresh'], async (req, res) => {
   }
 });
 
+// Ruta raíz - INFORMACIÓN DEL SISTEMA
+app.get('/', (req, res) => {
+  res.json({
+    status: 'active',
+    service: 'SOVYX High Ticket System',
+    version: '2.0.0',
+    description: 'Sistema de publicación y distribución orgánica en Instagram',
+    endpoints: {
+      media_upload: { method: 'POST', path: '/api/media/upload', description: 'Subir contenido' },
+      create_campaign: { method: 'POST', path: '/api/campaign', description: 'Crear campaña' },
+      monitor_campaign: { method: 'GET', path: '/api/monitor/:session_id', description: 'Monitorear campaña' },
+      health_check: { method: 'GET', path: '/health', description: 'Verificar estado' },
+      refresh_token: { method: 'GET', path: '/ig/refresh', description: 'Refrescar token Instagram' },
+      cors_test: { method: 'GET', path: '/cors-test', description: 'Probar configuración CORS' }
+    },
+    clients_configured: ['owner', 'client1', 'client2', 'client3', 'client4', 'client5'],
+    timestamp: new Date().toISOString(),
+    documentation: 'https://github.com/sophie2353/Sovyxbackend'
+  });
+});
+
 // ========== INICIALIZAR SERVER ==========
 const PORT = process.env.PORT || 3000;
 
