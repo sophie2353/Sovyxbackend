@@ -11,6 +11,23 @@ const path = require('path');
 const fs = require('fs');
 const app = express();
 
+// ========== CORS CONFIGURATION ==========
+app.use(cors({
+  origin: [
+    'https://sophie2353.github.io',
+    'https://sophie2353.github.io/Sovyx',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
+
+// Para preflight requests
+app.options('*', cors());
+
 // ========== CONFIGURACIÓN MULTER ==========
 const storage = multer.memoryStorage();
 const upload = multer({
